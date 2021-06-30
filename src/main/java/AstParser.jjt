@@ -1,4 +1,5 @@
 /**
+ * @author Burdyug Pavel
  * JavaCC - используется для генерации парсеров, используя язык описывающий грамматику
  * Документация - https://javacc.github.io/javacc/
  * Примеры использования JavaCC - https://javacc.github.io/javacc/tutorials/examples.html
@@ -13,7 +14,7 @@
  * Скачать бинарные файлы (jar) из руководство
  * Создать в папке из архива папку target и вставить туда джарник
  * Добавить папку scripts в Path переменую окружения Windows
- * Тогда в командной строке должны стать доступны комманды javacc, jjtree, javac
+ * Тогда в командной строке должны стать доступны комманды javacc, jjtree
  *
  * 2. Настройка через Maven (у меня не получилось)
  * Я думал, что можно установить зависимость и maven плогин и выполнять, команды выше как maven goals, но не срослось
@@ -25,30 +26,23 @@
  *
  * Запуск парсера
  * Для запуска сгенерированного парсера не требуется javacc
- * Необходимо перейти в папку парсера и запустить парсер
- * cd parser
- * java AstParser
- * В данном случае ввод осуществляется в консоль ";" служит окончанием ввода
- * Для разбора программы из файла
- * java AstParser < ../input (../input - путь к файлу)
  *
  * Генерация парсера (при измененении или с нуля)
  * Для генерации парсера по правилам описанным в AstParser.jjt нужно
  * При изменении в этом проекте:
- * -Выполнить файл generate-parser.bat, составленный для этого проекта (генерерует и собирает парсер в папке parser)
+ * -Выполнить файл generate-parser.bat, составленный для этого проекта (генерерует и собирает парсер)
  * (Или выполнить все команды ниже)
  * Рассмотрим команды из файла
  * jjtree src/main/java/AstParser.jjt - генерирует основные файлы узлов и файл AstParser.jj
  * (папка для генерации задана в AstParser.jjt)
- * javacc parser/AstParser.jj - генерация оставшихся файлов
- * javac parser/*.java - компилирует все исходники
+ * javacc src/main/java/AstParser.jj - генерация оставшихся файлов
  * При этом часть файлов: AstIdent.java, AstValue.java, AstOperator.java написаны вручную
  * Поэтому при генерации с нуля нужно скопировать эти файлы в необходимую папку
  */
 options {
   MULTI=true;
   NODE_DEFAULT_VOID=true; // это опция подавляет выражения, если для них явно не указано имя Ast узла
-  OUTPUT_DIRECTORY = "parser"; // здесь указывается куда будут генерировать файлы парсера
+  OUTPUT_DIRECTORY = "src/main/java"; // здесь указывается куда будут генерировать файлы парсера
 }
 
 PARSER_BEGIN(AstParser)
@@ -68,13 +62,13 @@ PARSER_BEGIN(AstParser)
 // Запуск парсера
 public class AstParser {
   /** Main entry point. */
-  public static void main(String args[]) throws java.io.FileNotFoundException {
-    System.out.println("Reading from standard input...");
-    AstParser t = new AstParser(System.in);
+  public static void main(String args[], String fileName) throws java.io.FileNotFoundException {
+    //System.out.println("Reading from standard input...");
+    //AstParser t = new AstParser(System.in);
 
-    // Regad from file
-    //java.io.InputStream fis = new java.io.FileInputStream("../input");
-    //AstParser t = new AstParser(fis);
+    // Read from file
+    java.io.InputStream fis = new java.io.FileInputStream(fileName);
+    AstParser t = new AstParser(fis);
     try {
       ASTStart n = t.Start();
       n.dump("");
@@ -200,7 +194,7 @@ void AddOperation() #Operator:
 /** A Multiplicative Expression.
  * (>1) означает что узел будет подавлятся если у умножения не будет 2 аргументов
   */
-void Mult() #Mult(>1) : {}
+void Mult() #Multi(>1) : {}
 {
   Group() ( MultOperation() Group() )*
 }
