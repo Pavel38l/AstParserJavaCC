@@ -1,0 +1,5 @@
+input a input b input c
+a = b + c*a
+b = c + a
+c = b + a*c + c
+output a output b output c

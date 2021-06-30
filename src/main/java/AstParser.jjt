@@ -1,0 +1,252 @@
+/**
+ * JavaCC - используется для генерации парсеров, используя язык описывающий грамматику
+ * Документация - https://javacc.github.io/javacc/
+ * Примеры использования JavaCC - https://javacc.github.io/javacc/tutorials/examples.html
+ * Исходные коды примеров с постороением AST дерева, используя jjtree - один из скриптов JavaCC
+ *
+ * Для использования JavaCC необходима ее установка
+ * Есть 2 варианта
+ * 1. Установка вручную - описана в руководстве https://javacc.github.io/javacc/#getting-started
+ * Если коротко нужно (для Windows):
+ * Скачать исходники(архив) из руководства
+ * Распоковать в папку Java (где установлены jdk и jre)
+ * Скачать бинарные файлы (jar) из руководство
+ * Создать в папке из архива папку target и вставить туда джарник
+ * Добавить папку scripts в Path переменую окружения Windows
+ * Тогда в командной строке должны стать доступны комманды javacc, jjtree, javac
+ *
+ * 2. Настройка через Maven (у меня не получилось)
+ * Я думал, что можно установить зависимость и maven плогин и выполнять, команды выше как maven goals, но не срослось
+ * Maven зависимость - https://mvnrepository.com/artifact/net.java.dev.javacc/javacc
+ * Maven плагин - https://github.com/phax/ph-javacc-maven-plugin
+ * В проекте есть неудачная попытка сконфигурить maven плагин
+ * Зато в ItelliJ Idea есть плагин для JavaCC файлов (*.jj, *.jjt)
+ *
+ *
+ * Запуск парсера
+ * Для запуска сгенерированного парсера не требуется javacc
+ * Необходимо перейти в папку парсера и запустить парсер
+ * cd parser
+ * java AstParser
+ * В данном случае ввод осуществляется в консоль ";" служит окончанием ввода
+ * Для разбора программы из файла
+ * java AstParser < ../input (../input - путь к файлу)
+ *
+ * Генерация парсера (при измененении или с нуля)
+ * Для генерации парсера по правилам описанным в AstParser.jjt нужно
+ * При изменении в этом проекте:
+ * -Выполнить файл generate-parser.bat, составленный для этого проекта (генерерует и собирает парсер в папке parser)
+ * (Или выполнить все команды ниже)
+ * Рассмотрим команды из файла
+ * jjtree src/main/java/AstParser.jjt - генерирует основные файлы узлов и файл AstParser.jj
+ * (папка для генерации задана в AstParser.jjt)
+ * javacc parser/AstParser.jj - генерация оставшихся файлов
+ * javac parser/*.java - компилирует все исходники
+ * При этом часть файлов: AstIdent.java, AstValue.java, AstOperator.java написаны вручную
+ * Поэтому при генерации с нуля нужно скопировать эти файлы в необходимую папку
+ */
+options {
+  MULTI=true;
+  NODE_DEFAULT_VOID=true; // это опция подавляет выражения, если для них явно не указано имя Ast узла
+  OUTPUT_DIRECTORY = "parser"; // здесь указывается куда будут генерировать файлы парсера
+}
+
+PARSER_BEGIN(AstParser)
+
+/**
+ * Simple Lang Ast parsing.
+ Грамматика:
+         num   -> <число>
+         ident -> <идентификатор>
+         group -> num | ident | '(' add ')'
+         mult  -> group (('*' | '/') group)*
+         add   -> mult (('+' | '-') mult)*
+         expr  -> 'input' ident | 'output' add | ident '=' add
+         prog  -> expr*
+         start -> prog
+ */
+// Запуск парсера
+public class AstParser {
+  /** Main entry point. */
+  public static void main(String args[]) throws java.io.FileNotFoundException {
+    System.out.println("Reading from standard input...");
+    AstParser t = new AstParser(System.in);
+
+    // Regad from file
+    //java.io.InputStream fis = new java.io.FileInputStream("../input");
+    //AstParser t = new AstParser(fis);
+    try {
+      ASTStart n = t.Start();
+      n.dump("");
+    } catch (Exception e) {
+      System.out.println(e.getMessage());
+      e.printStackTrace();
+    }
+  }
+}
+
+
+
+
+PARSER_END(AstParser)
+
+// Здесь указываються игнорируемые выражения
+SKIP :
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| <"//" (~["\n","\r"])* ("\n"|"\r"|"\r\n")> // пропуск комментариев
+| <"/*" (~["*"])* "*" (~["/"] (~["*"])* "*")* "/">
+}
+
+// Здесь объявляються все литералы и операторы (для удобства)
+TOKEN : /* LITERALS */
+{
+  < INTEGER_LITERAL:
+        <DECIMAL_LITERAL> (["l","L"])?
+      | <HEX_LITERAL> (["l","L"])?
+      | <OCTAL_LITERAL> (["l","L"])?
+  >
+|
+  < #DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])* >
+|
+  < #HEX_LITERAL: "0" ["x","X"] (["0"-"9","a"-"f","A"-"F"])+ >
+|
+  < #OCTAL_LITERAL: "0" (["0"-"7"])* >
+|
+  < INPUT: "input">
+|
+  < OUTPUT: "output">
+|
+ < ASSIGN: "=">
+|
+<SEMICOLON : ";">
+|
+<ADD: "+" | "-">
+|
+<MULT: "*" | "/" | "%">
+}
+
+TOKEN : /* IDENTIFIERS */
+{
+  < IDENTIFIER: <LETTER> (<LETTER>|<DIGIT>)* >
+|
+  < #LETTER: ["_","a"-"z","A"-"Z"] >
+|
+  < #DIGIT: ["0"-"9"] >
+}
+
+/** Входная точка. */
+ASTStart Start() #Start : {}
+{
+  Program()
+  { return jjtThis; }
+}
+
+/*
+Все выражения объявляются в таком виде,
+если после имени выражения не указано имя узла он подавляется
+*/
+void Program() : {}
+{
+    ( Expression() )* // программа состоит из любого количества выражений
+}
+
+void Expression() : {}
+{
+    Input() | Output() | Assign()
+}
+
+/**
+* Здесь объявлено имя класса Ast узла,
+  в данном случае, если класса ASTAssign нет, он будет сгенерирован
+*/
+void Assign() #Assign : {}
+{
+    Identifier() <ASSIGN> Add()
+}
+
+void Input() #Input : {}
+{
+      <INPUT> Identifier()
+}
+
+void Output() #Output : {}
+{
+      <OUTPUT> Add()
+}
+
+/** An Additive Expression.
+* (>1) означает что узел будет подавлятся если у сложения не будет 2 аргументов
+*/
+void Add() #Add(>1): {}
+{
+   Mult() ( AddOperation() Mult() )*
+}
+
+void AddOperation() #Operator:
+{
+  Token t;
+}
+{
+  t=<ADD>
+  {
+    jjtThis.setOperation(t.image);
+  }
+}
+
+/** A Multiplicative Expression.
+ * (>1) означает что узел будет подавлятся если у умножения не будет 2 аргументов
+  */
+void Mult() #Mult(>1) : {}
+{
+  Group() ( MultOperation() Group() )*
+}
+
+/**
+* Для данного выражения узел AST был написан вручную, поэтому он не будет сгенерирован.
+  У класса узла ASTOperation есть поле операция и сеттер для его установки.
+  Здесь в узел сохраняется символ операции сложения (- или +)
+  Также переопределен метод toString
+*/
+void MultOperation() #Operator:
+{
+  Token t;
+}
+{
+  t=<MULT>
+  {
+    jjtThis.setOperation(t.image);
+  }
+}
+
+void Group() : {}
+{
+  "(" Add() ")" | Identifier() | Number()
+}
+
+/** Здесь аналогично сохраняется имя идентификатора  */
+void Identifier() #Ident :
+{
+  Token t;
+}
+{
+  t=<IDENTIFIER>
+  {
+    jjtThis.setName(t.image);
+  }
+}
+
+/** Здесь сохраняется значение числа */
+void Number() #Value :
+{
+ Token t;
+ }
+{
+  t=<INTEGER_LITERAL>
+  {
+    jjtThis.setValue(t.image);
+  }
+}
